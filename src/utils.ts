@@ -1,5 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { ExpandedRecord } from './types.ts';
 
 let verboseEnabled = false;
@@ -40,7 +38,8 @@ export function expandHome(inputPath: string): string {
   }
 
   if (inputPath.startsWith('~/')) {
-    return path.join(process.env.HOME ?? '~', inputPath.slice(2));
+    const home = process.env.HOME ?? '~';
+    return home.endsWith('/') ? `${home}${inputPath.slice(2)}` : `${home}/${inputPath.slice(2)}`;
   }
 
   return inputPath;
@@ -52,7 +51,7 @@ export async function readToken(tokenFile: string): Promise<string> {
   }
 
   const expandedPath = expandHome(tokenFile);
-  const token = (await readFile(expandedPath, 'utf8')).trim();
+  const token = (await Bun.file(expandedPath).text()).trim();
   if (!token) {
     fail(`tokenFile is empty: ${tokenFile}`);
   }

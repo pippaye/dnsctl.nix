@@ -4,6 +4,19 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
     flake-utils.url = "github:numtide/flake-utils";
+    bun2nix.url = "github:nix-community/bun2nix?tag=2.0.8";
+    bun2nix.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  nixConfig = {
+    extra-substituters = [
+      "https://cache.nixos.org"
+      "https://nix-community.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+    ];
   };
 
   outputs =
@@ -11,46 +24,16 @@
       self,
       nixpkgs,
       flake-utils,
+      bun2nix,
     }:
     (flake-utils.lib.eachSystem flake-utils.lib.defaultSystems (
       system:
       let
-        pkgs = import nixpkgs { inherit system; };
-        package = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
-          pname = "dnsctl.nix";
-          version = "0.1.0";
-          src = ./.;
-
-          pnpmDeps = pkgs.fetchPnpmDeps {
-            inherit (finalAttrs) pname version src;
-            fetcherVersion = 3;
-            hash = "sha256-fc6LlCfHFD2E99RVEedM9+B3Q/qUGCI5fx92aRkt+fc=";
-          };
-
-          nativeBuildInputs = [
-            pkgs.nodejs
-            pkgs.esbuild
-            pkgs.pnpm
-            pkgs.pnpmConfigHook
-          ];
-
-          buildPhase = ''
-            runHook preBuild
-            pnpm run build
-            runHook postBuild
-          '';
-
-          installPhase = ''
-            runHook preInstall
-
-            mkdir -p $out/bin
-            printf '#!${pkgs.nodejs}/bin/node\n' > $out/bin/dnsctl
-            cat dist/main.cjs >> $out/bin/dnsctl
-            chmod +x $out/bin/dnsctl
-
-            runHook postInstall
-          '';
-        });
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ bun2nix.overlays.default ];
+        };
+        package = pkgs.callPackage ./default.nix { };
       in
       {
         packages = {
@@ -59,9 +42,8 @@
         };
         devShell = pkgs.mkShell {
           buildInputs = [
-            pkgs.esbuild
-            pkgs.nodejs
-            pkgs.pnpm
+            pkgs.bun
+            pkgs.bun2nix
           ];
         };
       }

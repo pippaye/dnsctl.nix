@@ -1,6 +1,6 @@
 # dnsctl.nix
 
-Nix-native DNS IaC: a TypeScript CLI with Cloudflare's official SDK.
+Nix-native DNS IaC: a TypeScript CLI for Cloudflare DNS.
 
 ## Quick Start (Plan JSON)
 
@@ -147,14 +147,25 @@ nix shell .#default
 Local development dependencies:
 
 ```bash
-pnpm install
+bun install
+bun run sync:nix
 ```
 
 Build the packaged CLI:
 
 ```bash
+bun run build
+bun dist/main.js --help
+
 nix build .#default
 ./result/bin/dnsctl --help
+```
+
+After changing dependencies, regenerate the Nix dependency manifest from `bun.lock`:
+
+```bash
+bun install
+bun run sync:nix
 ```
 
 ## Provider Setup
@@ -169,7 +180,7 @@ Cloudflare:
 - `src/main.ts` contains CLI parsing and command orchestration.
 - `src/providers/index.ts` defines the provider base class and the provider factory.
 - `src/providers/index.ts` lazily loads provider implementations by `type`.
-- `src/providers/cloudflare.ts` statically imports the Cloudflare SDK and implements Cloudflare behavior only.
+- `src/providers/cloudflare.ts` talks to the Cloudflare REST API directly with `fetch`.
 
 ## Notes
 
@@ -177,5 +188,5 @@ Cloudflare:
 - Updates are matched per `name` + `type`; value or metadata changes overwrite existing records when possible.
 - Conflicting `A`/`AAAA`/`CNAME` records with the same name are deleted before replacement, even without `--prune`.
 - Type changes are still treated as delete + create.
-- Packaged builds use `esbuild` to bundle the CLI into a single executable script and install it as `bin/dnsctl`.
+- Packaged builds use `bun build` plus `bun2nix` dependency vendoring, then install `bin/dnsctl` with a Bun shebang.
 - Legacy shell provider scripts were removed.

@@ -1,5 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
 import { Command, CommanderError } from 'commander';
 import type { DiffResult, ExpandedRecord, Plan } from './types.ts';
 import { providerForZone } from './providers/index.ts';
@@ -55,6 +53,21 @@ function resolveFlakeRef(flake?: string): string {
   return `${flake}#${DEFAULT_FLAKE_ATTR}`;
 }
 
+function runNixEval(args: string[]): string {
+  const result = Bun.spawnSync(['nix', ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const stdout = new TextDecoder().decode(result.stdout).trim();
+  const stderr = new TextDecoder().decode(result.stderr).trim();
+
+  if (result.exitCode !== 0) {
+    fail(stderr || 'nix eval failed');
+  }
+
+  return stdout;
+}
+
 async function loadPlan(options: GlobalOptions): Promise<Plan> {
   if (options.nix && options.flake) {
     fail('use either --nix or --flake, not both');
@@ -62,12 +75,7 @@ async function loadPlan(options: GlobalOptions): Promise<Plan> {
 
   if (options.nix) {
     verbose('Evaluating plan from Nix file', { nixFile: options.nix });
-    const result = spawnSync('nix', ['eval', '--json', '--file', options.nix], { encoding: 'utf8' });
-    if (result.status !== 0) {
-      fail(result.stderr.trim() || 'nix eval failed');
-    }
-
-    const plan = JSON.parse(result.stdout);
+    const plan = JSON.parse(runNixEval(['eval', '--json', '--file', options.nix]));
     validatePlan(plan);
     logPlanSummary(plan);
     return plan;
@@ -76,12 +84,7 @@ async function loadPlan(options: GlobalOptions): Promise<Plan> {
   if (options.flake || (!options.plan && !options.nix)) {
     const flakeRef = resolveFlakeRef(options.flake);
     verbose('Evaluating plan from flake output', { flakeRef });
-    const result = spawnSync('nix', ['eval', '--json', flakeRef], { encoding: 'utf8' });
-    if (result.status !== 0) {
-      fail(result.stderr.trim() || 'nix eval failed');
-    }
-
-    const plan = JSON.parse(result.stdout);
+    const plan = JSON.parse(runNixEval(['eval', '--json', flakeRef]));
     validatePlan(plan);
     logPlanSummary(plan);
     return plan;
@@ -89,7 +92,7 @@ async function loadPlan(options: GlobalOptions): Promise<Plan> {
 
   const planPath = options.plan ?? 'plan.json';
   verbose('Reading plan file', { planPath });
-  const planContent = await readFile(planPath, 'utf8');
+  const planContent = await Bun.file(planPath).text();
   const plan = JSON.parse(planContent);
   validatePlan(plan);
   logPlanSummary(plan);
